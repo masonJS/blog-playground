@@ -18,3 +18,14 @@
 
 ### 지속성
 - 성공적으로 트랜잭션 커밋이 됬을시 데이터베이스에 영구적으로 저장 및 유실 방지 보장
+
+## Isolation level
+
+Dirty Read
+
+Non-repeatable Read (==Fuzzy read)
+
+Phantom Read
+
+
+
