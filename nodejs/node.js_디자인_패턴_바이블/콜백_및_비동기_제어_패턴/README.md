@@ -79,3 +79,34 @@ while(events = demultiplexer.watch(watchedList)) {
 - require 함수는 모듈을 로드할 때까지 대기(동기식)한다.
 - Node.js의 핵심 라이브러리가 비동기 방식에 대한 대안을 동기식 API를 제공하는 이유중 하나
 
+### ESM: ECMAScript 모듈
+- ECMAScript 2015(ES6)에서 도입된 모듈 시스템
+- 순환 종속성에 대한 지원과 비동기적으로 모듈을 로드 가능
+- CommonJS 와 달리 ES 모듈은 static 하다.
+```js
+// esm
+if (condition) {
+    import {foo} from 'foo';
+} else {
+    import {bar} from 'bar';
+}
+```
+
+```js
+// commonjs
+let module = null;
+
+if (condition) {
+    module = require('foo');
+} else {
+    module = require('bar');
+}
+```
+
+**Node.js에서 ESM의 사용**
+- ESM 모듈 사용 방법
+  - 모듈 파일의 확장자를 .mjs로 지정
+  - package.json 파일에 type 필드에 'module'값을 설정
+- ESM 에서는 import할때 파일의 확장자를 구체적으로 명시해줘야 한다. (commonjs는 생략 가능)
+
+
