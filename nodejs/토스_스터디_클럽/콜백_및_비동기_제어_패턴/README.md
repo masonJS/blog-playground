@@ -21,7 +21,7 @@ console.log('console.log');
 node.js의 이벤트 루프의 역할을 잘 기억해두는것이 좋다.    
 이벤트 루프는 js 호출 스택이 비어져있는지 옵저버하고 task Queue 또는 microTask Queue에 쌓인 콜백 함수들을 순회하면서 처리하는 역할을 담당한다.
 
-### 이벤트 루프를 차단시키는 모듈 및 원인
+### 이벤트 루프를 차단시키는 모듈들
 ```
 1.Encryption
 - crypto.randomBytes (synchronous version)
