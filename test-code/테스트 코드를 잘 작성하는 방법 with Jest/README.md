@@ -62,7 +62,7 @@ describe('지원자', () => {
 - 전역 변수로 빼기
 - 테스트 각각의 실행 전 수행되는 `beforeEach`(setup 메소드)로 빼기
 
-두 가지 방법중 필자는 `beforeEach`메소드에 해당 중복 코드를 빼서 리팩터링을 해보았다.
+두 가지 방법중 `beforeEach`메소드에 해당 중복 코드를 빼서 리팩터링을 해보았다.
 ```typescript
 
 describe('지원자', () => {

@@ -1,7 +1,10 @@
-## 스티디 후기
+## 스터디간에 나왔던 이야기
 
 ### 이벤트 루프
-Node.js 신입 개발자 면접문제에 단골로 물어보는 질문중 아래의 코드에서 로그가 찍히는 결과와 이유에 대한 질문이다.
+Node.js 신입 개발자 면접 질문중 단골로 나오는 문제이다.
+
+"아래의 코드에서 출력되는 로그 결과와 이유는?"
+
 ```js
 setTimeout(() => {
     console.log('setTimeout log');
@@ -45,13 +48,15 @@ node.js의 이벤트 루프의 역할을 잘 기억해두는것이 좋다.
 ```
 
 ### UV_THREADPOOL_SIZE(default=4) 증가로 인한 성능 향상?
-[관련 링크](https://dev.to/johnjardincodes/increase-node-js-performance-with-libuv-thread-pool-5h10)
+
+(node 쓰레드풀의 사이즈를 확장해서 성능 튜닝을 할수 있는 레퍼런스들에 대한 생각 - [관련 링크](https://dev.to/johnjardincodes/increase-node-js-performance-with-libuv-thread-pool-5h10))
+
 - thread_pool을 늘렸다고 해서 db io 작업들은 os kernel에서 처리하기 때문에 효과가 없다
 - cpu 집약적인 처리의 성능을 높이기이해 pool size를 늘렸다고 해서 성능 향상을 크게 기대하기 어렵다. 
 - thread 개수가 늘어난 대신 전체적인 thread 성능을 떨어진다.
 
 
-## Node.js 디자인 패턴 바이블
+## 스터디 책 내용 정리
 
 ### Node.js 철학
 **작은 외부 인터페이스**
