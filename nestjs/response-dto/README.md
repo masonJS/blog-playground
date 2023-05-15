@@ -1,4 +1,4 @@
-부제: 이제 @ApiProperty() 와 @Expose() 반복 코드는 그만!
+부제: 이제 @Exclude() 와 @Expose() 반복 코드는 그만!
 
 ## Table of Contents
 1. [들어가기 앞서](#들어가기-앞서)
@@ -6,9 +6,8 @@
     1. [프로퍼티 데코레이터](#프로퍼티-데코레이터)
     2. [클래스 데코레이터](#클래스-데코레이터)
 3. [ResponseDto 데코레이터 만들기](#ResponseDto-데코레이터-만들기)
-4. [class-transformer 와 nestjs/swagger 파헤쳐보기](#class-transformer-와-nestjs/swagger-파헤쳐보기)
-    1. [class-transformer 살펴보기](#class-transformer-살펴보기)
-    2. [nestjs/swagger 살펴보기](#nestjs/swagger-살펴보기)
+4. [class-transformer 살펴보기](#class-transformer-살펴보기)
+
 
 ## 들어가기 앞서,
 현재 회사에서 NestJS 프레임워크로 개발된 모든 프로젝트에서는 HTTP 응답값에 대해선 모두 DTO 클래스로 관리하고 있습니다.  
@@ -34,12 +33,11 @@ export class UserResponse {
 }
 ```
 
-추가로 api 스펙 정의를 위한 Swagger 문서를 위해 @ApiProperty() 데코레이터를 사용하고 있으며 @Expose(), @Exclude() 데코레이터를 통해 JSON 응답값으로 역직렬화하여 내보내는 프로퍼티를 제어하고 있습니다.
-(@ApiProperty() 데코레이터에 대한 자세한 내용은 [이곳](https://docs.nestjs.com/openapi/types-and-parameters)을 @Expose(), @Exclude() 데코레이터에 대한 자세한 내용은 [이곳](https://docs.nestjs.com/techniques/serialization#class-transformer)을 참고해주세요.)  
+추가로 @Expose(), @Exclude() 데코레이터를 통해 JSON 응답값으로 역직렬화하여 내보내는 프로퍼티를 제어하고 있습니다.
+(@Expose(), @Exclude() 데코레이터에 대한 자세한 내용은 [이곳](https://docs.nestjs.com/techniques/serialization#class-transformer)을 참고해주세요.)  
 그래서 위의 코드는 아래와 같이 변경되어지게 됩니다.
 
 ```typescript
-import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Exclude } from 'class-transformer';
 
 export class UserResponse {
@@ -51,13 +49,11 @@ export class UserResponse {
     this._name = user.name;
   }
 
-  @ApiProperty()
   @Expose()
   id(): number {
     return this._id;
   }
 
-  @ApiProperty()
   @Expose()
   name(): string {
     return this._name;
@@ -66,13 +62,13 @@ export class UserResponse {
 ```
 하지만 결과적으로 우리는 여기서 아래와 같은 반복적인 패턴이 보여지게 됩니다.
 - private 프로퍼티에는 @Exclude() 데코레이터를 사용하여 역직렬화에서 제외시킨다.
-- getter 프로퍼티에는 @ApiProperty()와 @Expose() 데코레이터를 사용하여 Swagger 문서와 JSON 응답값에 포함시킨다.
+- getter 프로퍼티에는 @Expose() 데코레이터를 사용하여 역직렬화한다.
 
 이러한 반복적인 코드 패턴은 사실 우리를 너무 지루하게 만들고 생산성을 떨어뜨립니다.  
 그래서 조금 더 간결하게 코드를 작성할 수 있는 클래스 데코레이터를 만들어보는 방법을 알아보도록 하겠습니다.  
 
 ## 데코레이터에 대해서
-앞서 보여줬던 예제 코드에서 @ApiProperty(), @Expose(), @Exclude()는 모두 데코레이터로 선언되어 있습니다.  
+앞서 보여줬던 예제 코드에서 @Expose(), @Exclude()는 모두 데코레이터로 선언되어 있습니다.  
 우선 데코레이터란 **TypeScript에서 클래스, 메소드, 프로퍼티, 매개변수등에 적용되어지며 해당 메타데이터의 접근, 수정, 확장을 할 수 있는 함수**입니다.  
 데코레이터는 선언앞에 `@`을 붙여 사용되어질 수 있으며 런타임에서 실행되어집니다.  
 
@@ -153,9 +149,9 @@ function decorator(target: Function) {
 ## ResponseDto 데코레이터 만들기
 ResponseDto 데코레이터 역할은 다음과 같습니다.
 ```
-1. 해당 클래스의 getter 프로퍼티에 @ApiProperty(), @Expose() 데코레이터 적용 
+1. 해당 클래스의 getter 프로퍼티에 @Expose() 데코레이터 적용 
 2. 해당 클래스의 프로퍼티에 @Exclude() 데코레이터 적용 
-3. 해당 클래스의 getter 프로퍼티에 @ApiProperty()또는 @Expose() 데코레이터가 이미 적용되어진 경우 무시 
+3. 해당 클래스의 getter 프로퍼티에 @Expose() 데코레이터가 이미 적용되어진 경우 무시 
 ```
 
 먼저 1,2 번을 구현하기위해선 다음과 같은 의사 코드를 작성할수 있습니다.
@@ -164,7 +160,7 @@ ResponseDto 데코레이터 역할은 다음과 같습니다.
 1) @Exclude() 데코레이터 클래스에 적용
 2) 클래스에 선언된 프로퍼티들 조회
 3) 2)에서의 프로퍼티들을 순회하며 getter 프로퍼티 조회
-4) 3)에서의 getter 프로퍼티들을 순회하며 @ApiProperty(), @Expose() 데코레이터 적용
+4) 3)에서의 getter 프로퍼티들을 순회하며 @Expose() 데코레이터 적용
 ```
 참고) @Exclude() 데코레이터를 클래스 데코레이터로 적용하고 프로퍼티에 @Expose() 데코레이터를 적용하면 해당 프로퍼티는 제외되지 않고 응답에 포함됩니다.
 ```ts
@@ -201,14 +197,10 @@ export function ResponseDto() {
 
     const properties = Object.getOwnPropertyNames(target.prototype); // 2. 클래스에 선언된 프로퍼티들 조회
 
-    // 3. 해당 클래스의 getter 메소드에 @ApiProperty()또는 @Expose() 데코레이터가 이미 적용되어진 경우 무시 
+    // 3. 해당 클래스의 getter 메소드에 @Expose() 데코레이터가 이미 적용되어진 경우 무시 
     properties
       .filter((key) => isGetter(target.prototype, key))
       .forEach((key) => Expose()(target.prototype, key));
-
-    properties
-      .filter((key) => isGetter(target.prototype, key))
-      .forEach((key) => ApiProperty()(target.prototype, key));
   };
 
   function isGetter(prototype: any, key: string): boolean {
@@ -217,15 +209,14 @@ export function ResponseDto() {
 }
 ```
 
-## class-transformer 와 nestjs/swagger 파헤쳐보기
+## class-transformer 살펴보기
 앞서 `@ResponseDto` 데코레이터를 구현을 해보았는데요. 아직 마지막으로 남은 미션이 존재합니다.  
 ```
-3. 해당 클래스의 getter 메소드에 @ApiProperty() 또는 @Expose() 데코레이터가 이미 적용되어진 경우 무시 
+3. 해당 클래스의 getter 메소드에 @Expose() 데코레이터가 이미 적용되어진 경우 무시 
 ```
-이 미션을 해결하기 위해서는 `class-transformer`와 `nestjs/swagger`의 내부 동작을 이해해야 합니다.  
+이 미션을 해결하기 위해서는 `class-transformer`의 내부 동작을 이해해야 합니다.  
 그래서 각각의 라이브러리들을 하나씩 파헤쳐보겠습니다. ㄲㄲ
 
-### class-transformer 살펴보기
 @Expose() 데코레이터를 선언할때 해당 내부 로직은 아래와 같습니다.   
 
 [expose.decorator.ts](https://github.com/typestack/class-transformer/blob/develop/src/decorators/expose.decorator.ts)
@@ -293,77 +284,5 @@ export function ResponseDto() {
     // ...
   };
   
-}
-```
-
-### nestjs/swagger 살펴보기
-다음 nestjs/swagger 라이브러리를 파헤쳐보겠습니다.
-@ApiProperty() 데코레이터를 선언할때 해당 내부 로직은 아래와 같습니다.
-
-[api-property.decorator.ts](https://github.com/nestjs/swagger/blob/master/lib/decorators/api-property.decorator.ts)
-```ts
-import { DECORATORS } from '../constants';
-import { createPropertyDecorator } from './helpers';
-
-export function ApiProperty(
-  options: ApiPropertyOptions = {}
-): PropertyDecorator {
-  return createApiPropertyDecorator(options);
-}
-
-
-export function createApiPropertyDecorator(
-  options: ApiPropertyOptions = {},
-  overrideExisting = true
-): PropertyDecorator {
-
-  // ...
-
-  return createPropertyDecorator(
-    DECORATORS.API_MODEL_PROPERTIES,
-    options,
-    overrideExisting
-  ); 
-}
-```
-`createPropertyDecorator`함수를 살펴보면 `Reflect.defineMetadata`함수를 통해 메타데이터를 저장하고 있고 메타데이터 키는 `DECORATORS.API_MODEL_PROPERTIES`를 사용한다는것을 확인할 수 있습니다.
-
-[helpers.ts](https://github.com/nestjs/swagger/blob/56b4054628c486860d7937650aae26ad983b30dd/lib/decorators/helpers.ts#L30)
-```ts
-
-export function createPropertyDecorator<T extends Record<string, any> = any>(
-  metakey: string,
-  metadata: T,
-  overrideExisting = true
-): PropertyDecorator {
-
-  return (target: object, propertyKey: string) => {
-
-    // ...
-    Reflect.defineMetadata(metakey, target, propertyKey); 
-  }
-}
-```
-
-그렇다면 우리는 이 `DECORATORS.API_MODEL_PROPERTIES`키를 사용하여 메타데이터를 가져와 존재여부를 파악하는 코드를 작성할수 있게 됩니다.
-```ts
-import { ApiProperty } from '@nestjs/swagger';
-import { DECORATORS } from '@nestjs/swagger/dist/constants';
-
-export function ResponseDto() {
-  return function (target: any) {
-    // ...
-    const properties = Object.getOwnPropertyNames(target.prototype);
-
-    properties
-      .filter(
-        (key) =>
-          isGetter(target.prototype, key) &&
-          !Reflect.hasMetadata(DECORATORS.API_MODEL_PROPERTIES, target, key), // // 해당 클래스의 getter 메소드에 @ApiProperty() 데코레이터가 이미 적용되어진 경우 무시 
-      )
-      .forEach((key) => ApiProperty()(target.prototype, key));
-    // ...
-  };
-
 }
 ```
