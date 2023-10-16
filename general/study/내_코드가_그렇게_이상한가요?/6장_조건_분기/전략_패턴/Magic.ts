@@ -1,10 +1,13 @@
 import {Member} from "./Member";
+import {MagicPoint} from "./vo/MagicPoint";
+import {AttackPower} from "./vo/AttackPower";
+import {TechnicalPoint} from "./vo/TechnicalPoint";
 
 export interface Magic {
   name: string;
-  costMagicPoint: number;
-  attackPower: number;
-  costTechnicalPoint: number;
+  costMagicPoint: MagicPoint;
+  attackPower: AttackPower;
+  costTechnicalPoint: TechnicalPoint;
 }
 
 export class Fire implements Magic {
@@ -14,16 +17,17 @@ export class Fire implements Magic {
     return '파이어';
   }
 
-  get costMagicPoint(): number {
-    return 1;
+  get costMagicPoint(): MagicPoint {
+    return new MagicPoint(1);
   }
 
-  get attackPower(): number {
-    return 1 + this.member.level * 0.5;
+  get attackPower(): AttackPower {
+    const value =  1 + this.member.level * 0.5;
+    return new AttackPower(value);
   }
 
-  get costTechnicalPoint(): number {
-    return 0;
+  get costTechnicalPoint(): TechnicalPoint {
+    return new TechnicalPoint(0)
   }
 }
 
@@ -34,16 +38,17 @@ export class Lightning implements Magic {
     return '라이트닝';
   }
 
-  get costMagicPoint(): number {
-    return 2;
+  get costMagicPoint(): MagicPoint {
+    return new MagicPoint(2)
   }
 
-  get attackPower(): number {
-    return 2 + this.member.level * 1.5;
+  get attackPower(): AttackPower {
+    const value =  2 + this.member.level * 1.5;
+    return new AttackPower(value);
   }
 
-  get costTechnicalPoint(): number {
-    return 5;
+  get costTechnicalPoint(): TechnicalPoint {
+    return new TechnicalPoint(5);
   }
 }
 
@@ -55,15 +60,16 @@ export class HellFire implements Magic {
     return '헬파이어';
   }
 
-  get costMagicPoint(): number {
-    return 5;
+  get costMagicPoint(): MagicPoint {
+    return new MagicPoint(5);
   }
 
-  get attackPower(): number {
-    return 5 + this.member.level * 3;
+  get attackPower(): AttackPower {
+    const value =  5 + this.member.level * 3;
+    return new AttackPower(value);
   }
 
-  get costTechnicalPoint(): number {
-    return 10;
+  get costTechnicalPoint(): TechnicalPoint {
+    return new TechnicalPoint(10);
   }
 }
