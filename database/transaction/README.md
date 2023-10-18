@@ -21,11 +21,24 @@
 
 ## Isolation level
 
-Dirty Read
+READ UNCOMMITTED
+- 커밋되지 않은 데이터를 읽을 수 있음
+- Dirty Read 발생 가능
 
-Non-repeatable Read (==Fuzzy read)
+READ COMMITTED
+- 커밋된 데이터만 읽을 수 있음
+- Non-Repeatable Read 발생 가능
+  - 하나의 트랜잭션이 같은 값을 조회할 때 다른 값이 조회되는 현상
 
-Phantom Read
+REPEATABLE READ
+- 트랜잭션마다 트랜잭션 ID를 부여하여 트랜잭션 ID보다 작은 트랜잭션 번호에서 변경한 것만 읽음
+- MVCC 방식
+- Phantom Read 발생 가능
+  - 하나의 트랜잭션이 같은 쿼리를 두 번 실행했을 때 다른 결과가 조회되는 현상
+
+SERIALIZABLE
+- 가장 단순한 격리 수준이지만 가장 엄격한 격리 수준
+- 일관성이 보장되지만 성능이 가장 떨어짐
 
 
 
