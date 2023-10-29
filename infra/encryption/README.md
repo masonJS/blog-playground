@@ -70,3 +70,62 @@ const keyring = new KmsKeyringNode({ keyIds })
 
 const { plaintext } = await decrypt(keyring, result) // 복호화
 ```
+
+### Data Key Caching - 데이터 키 캐싱
+매번 암호화를 할때마다 데이터 키를 생성하는 것은 비용이 많이 든다.
+또한 초당 AWS KMS 요청수 제한이 있기 때문에 애플리케이션의 확장을 위해 데이터 키 캐싱이 필요하다.
+
+AWS Encryption SDK는 로컬 캐시와 캐시와 상호 작용하고 사용자가 설정한 보안 임계값을 적용하는 caching CMM을 제공하여 데이터 키 캐싱을 지원한다.      
+데이터 암호화, 복호화에 데이터 키 캐싱을 사용하는 경우, AWS Encryption SDK는 먼저 캐시에서 요청과 일치하는 데이터 키를 검색한다.      
+그리고 유효한 일치 항목을 찾으면 캐시된 데이터 키를 사용하여 데이터를 암호화하고 그렇지 않으면 캐시가 없을 때와 마찬가지로 새 데이터 키를 생성한다.    
+
+**데이터 키 캐싱 예제**
+
+```ts
+import {
+  KmsKeyringNode,
+  buildClient,
+  CommitmentPolicy,
+  NodeCachingMaterialsManager,
+  getLocalCryptographicMaterialsCache,
+} from '@aws-crypto/client-node'
+
+const { encrypt, decrypt } = buildClient(
+  CommitmentPolicy.REQUIRE_ENCRYPT_REQUIRE_DECRYPT
+);
+
+
+function getKmsKeyring() {
+  const generatorKeyId = '';
+  const keyIds = [''];
+  return new KmsKeyringNode({ generatorKeyId, keyIds })
+}
+
+function getCachingCMM(keyring: KmsKeyringNode) {
+  const capacity = 100 // 최대 캐시할 데이터 키 수
+  const cache = getLocalCryptographicMaterialsCache(capacity) // 로컬 캐시
+
+  const maxAge = 1000 * 60 // 캐시 유효 시간 ms 단위
+
+  const cachingCMM = new NodeCachingMaterialsManager({
+    backingMaterials: keyring,
+    cache,
+    maxAge,
+  })
+}
+
+async function encrypt(plaintext: string): Promise<{ result: any }> {
+  const cachingCMM = getCachingCMM(getKmsKeyring())
+  
+  return await encrypt(cachingCMM, plaintext, { plaintextLength: plaintext.length }) // 암호화
+}
+
+async function decrypt(encryptedText: string): promise<{ plaintext: string }> {
+  const cachingCMM = getCachingCMM(getKmsKeyring())
+    
+  return await decrypt(cachingCMM, encryptedText) // 복호화
+  
+}
+```
+
+
