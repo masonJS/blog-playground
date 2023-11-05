@@ -9,7 +9,7 @@
 - 부분 취소의 결과가 나타나지 않도록 전부 반영 or 전부 실패
 
 ### 일관성
-- 데이터베이스의 규칠(제약 조건)을 유지시키면서 애플리케이션의 로직을 통해 일관성을 처리하는 성질 (데이터베이스 + 애플리케이션 책임)
+- 데이터베이스의 규칙(제약 조건)을 유지시키면서 애플리케이션의 로직을 통해 일관성을 처리하는 성질 (데이터베이스 + 애플리케이션 책임)
 
 ### 격리성
 - 동시에 실행되는 트랜잭션을 서로 격리하는 성질 (동시성 제어)
@@ -19,26 +19,66 @@
 ### 지속성
 - 성공적으로 트랜잭션 커밋이 됬을시 데이터베이스에 영구적으로 저장 및 유실 방지 보장
 
-## Isolation level
+## 격리
+- 여러 클라이언트가 같은 데이터에 접근할때 발생하는 경쟁 상태(race condition)를 막기 위해 격리
+- 트랜잭션을 서로 격리해서 다른 트랜잭션이 영향을 주지 못하게 함
 
-READ UNCOMMITTED
-- 커밋되지 않은 데이터를 읽을 수 있음
-- Dirty Read 발생 가능
+### Read Uncommitted
+- Dirty Read 발생
+  - 커밋되지 않은 데이터를 조회
+- Dirty Write 발생
+  - 커밋되지 않은 데이터를 쓰기
 
-READ COMMITTED
-- 커밋된 데이터만 읽을 수 있음
-- Non-Repeatable Read 발생 가능
-  - 하나의 트랜잭션이 같은 값을 조회할 때 다른 값이 조회되는 현상
+<img src="dirty_read.png" width="600">
 
-REPEATABLE READ
-- 트랜잭션마다 트랜잭션 ID를 부여하여 트랜잭션 ID보다 작은 트랜잭션 번호에서 변경한 것만 읽음
-- MVCC 방식
-- Phantom Read 발생 가능
+### Read Committed
+- Dirty Read & Write 방지
+  - 커밋된 데이터만 조회 
+    - 커밋되어진 값과 트랜잭션 진행중인 값을 분리하여 커밋되어진 값만 조회
+  - 커밋된 데이터만 쓰기
+    - 레코드 단위로 잠금 사용
+- Read Skew 발생 가능
   - 하나의 트랜잭션이 같은 쿼리를 두 번 실행했을 때 다른 결과가 조회되는 현상
 
-SERIALIZABLE
+<img src="read_skew.png" width="600">
+
+### Repeatable Read
+- 트랜잭션마다 트랜잭션 ID를 부여하여 트랜잭션 ID보다 작은 트랜잭션 번호에서 변경한 것만 읽음
+- MVCC 방식
+
+<img src="mvcc.png" width="600">
+
+- Lost Update 발생 가능
+  - 두 개의 트랜잭션이 같은 데이터를 수정할 때 발생하는 문제 ex) count 증가, 위키 페이지 수정
+
+<img src="lost_update.png" width="600">
+
+- 변경 유실을 막는 방법
+  - 원자적(atomic) 연산
+    - DB가 지원하는 원자적 연산 사용 
+    - `UPDATE ... SET count = count + 1`
+  - 명시적 잠금
+    - 조회할때 수정할 행을 잠금
+    - `SELECT ... FOR UPDATE`
+
+<img src="명시적_lock.png" width="600"> 
+
+  - CAS
+    - Compare And Swap
+
+<img src="cas_lock.png" width="600">
+
+- Phantom Read 발생 가능
+  - 한 트랜잭션의 결과가 다른 트랜잭션에 영향을 주는 현상
+  - 서로 다른 데이터를 변경함으로써 발생하는 문제
+
+<img src="phantom_read.png" width="600">
+    
+
+### Serializable
 - 가장 단순한 격리 수준이지만 가장 엄격한 격리 수준
 - 일관성이 보장되지만 성능이 가장 떨어짐
+- 인덱스 또는 조건 기반 잠금을 사용
 
 
 
