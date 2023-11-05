@@ -81,4 +81,28 @@
 - 인덱스 또는 조건 기반 잠금을 사용
 
 
+## MySQL & PostgreSQL
 
+### MySQL
+- 기본 격리 수준 : Repeatable Read
+- Lost Update 발생시 해결 방안
+  - 명시적 잠금 (locking read)
+    - `SELECT ... FOR UPDATE`
+    - `SELECT ... LOCK IN SHARE MODE`
+
+
+### PostgreSQL
+- 기본 격리 수준 : Read Committed
+- Lost Update 발생시 해결 방안
+  - Repeatable Read로 격리 수준 변경
+    - first-updater-win 적용
+    - 같은 데이터에 먼저 update한 tx가 commit되면 나중에 update한 tx는 rollback된다.
+    - 데이터의 일관성 보장
+
+> 이미 다른 동시 트랜잭션에 의해 업데이트(또는 삭제 또는 잠김)되었을 수 있습니다.  
+이 경우 Repeatable Read는 첫 번째 업데이트 트랜잭션이 커밋되거나 롤백될 때까지 기다립니다(아직 진행 중인 경우).   
+첫 번째 업데이터가 롤백되면 그 효과는 무효화되고 Repeatable Read 트랜잭션은 원래 발견된 행을 계속 업데이트할 수 있습니다.    
+그러나 첫 번째 업데이터가 커밋하면(그리고 단순히 잠근 것이 아니라 실제로 행을 업데이트하거나 삭제하면) Repeatable Read 트랜잭션은 아래와 같은 메시지와 함께 롤백됩니다.
+> > ERROR:  could not serialize access due to concurrent update
+>
+> [PostgreSQL 공식 문서](https://www.postgresql.org/docs/9.5/transaction-iso.html)
