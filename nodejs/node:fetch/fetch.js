@@ -1,17 +1,59 @@
+ class WebClient {
+  static create = (url, timeout) => new WebClientService(url, timeout);
+}
 
-const url = 'https://jsonplaceholder.typicode.com/todos/1';
-const option = {
-    method: 'GET',
-    headers: {
-        'Content-Type': 'application/json'
-    },
-    signal: AbortSignal.timeout(2000)
-};
+class WebClientService {
+  #option = {
+      method: 'GET',
+      headers: {
+          'Content-Type': 'application/json'
+      },
+  };
+  #url;
+  #timeout ;
 
-(async () => {
-    const res = await fetch(url, option);
-    const body = await res.json();
+  constructor(url, timeout = 5000) {
+      this.#url = url;
+      this.#timeout = timeout;
+  }
 
-    console.log(res.status);
-    console.log(body);
-})()
+  get() {
+      this.#option.method = 'GET';
+
+      return this;
+  }
+
+  post() {
+      this.#option.method = 'POST';
+
+      return this;
+  }
+
+  async retrieve() {
+    try {
+      const response = await fetch(this.#url, {
+        ...this.#option,
+        signal: AbortSignal.timeout(this.#timeout)
+      });
+
+      return await response.json();
+
+    } catch (e) {
+      if (e.name === 'TimeoutError') {
+        throw new WebClientResponseError('Request timeout');
+      }
+      throw new WebClientResponseError(e.message);
+    }
+  }
+}
+
+class WebClientResponseError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'WebClientResponseError';
+  }
+}
+
+module.exports = {
+  WebClient,
+}
