@@ -1,4 +1,4 @@
-## HTTP keep-alive
+# HTTP keep-alive
 
 웹 서버를 구축하면서 들어오게되는 HTTP 요청수를 처리하기 위해 많은 리소스를 소모하게된다.
 
