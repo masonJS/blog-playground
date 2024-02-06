@@ -1,4 +1,4 @@
-## 우리는 왜 console.log 대신 logger 라이브러리를 사용해야될까?
+# 우리는 왜 console.log 대신 logger 라이브러리를 사용해야될까?
 
 1. 로그 레벨 관리:
 - 다양한 로그 레벨(예: error, warn, info, verbose, debug, silly)을 제공 

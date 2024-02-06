@@ -1,4 +1,4 @@
-## cookie
+# cookie
 
 ### 쿠키 생성 및 사용 과정
 - [참고글] (https://ko.javascript.info/cookie)
