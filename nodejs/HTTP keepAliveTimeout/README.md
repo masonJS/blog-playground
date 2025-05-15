@@ -16,5 +16,22 @@
   - [문서](https://docs.aws.amazon.com/ko_kr/elasticloadbalancing/latest/application/application-load-balancers.html#connection-idle-timeout)
 - 따라서 ELB의 idle timeout을 60s로 설정하고 node.js의 http.Agent의 keepAliveTimeout을 61s로 설정하면 해결된다.
 
+### Nestjs 에서 KeepAliveTimeOut 설정 방법
+
+```ts
+
+export class AppModule implements OnApplicationBootstrap {
+  constructor(private readonly adapterHost: HttpAdapterHost) {}
+
+  onApplicationBootstrap() {
+    const server: Server = this.adapterHost.httpAdapter.getHttpServer();
+    server.keepAliveTimeout = 61000;
+  }
+}
+```
+여기서 중요한건 httpAdapter의 getHttpServer() 메소드에서 nodejs http server 반환한다.    
+getInstance() 메소드를 사용하면 nestjs를 래핑하고 있는 웹 프레임워크 express, fastify 를 반환합니다.
+
+
 ### 참고글
 - [Tuning HTTP Keep-Alive in Node.js](https://connectreport.com/blog/tuning-http-keep-alive-in-node-js/)
