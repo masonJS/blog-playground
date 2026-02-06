@@ -1,0 +1,276 @@
+# Transaction Outbox Pattern
+
+DB 트랜잭션과 메시지 발행의 원자성을 보장하기 위한 패턴이다.
+- 분산 환경에서 데이터베이스 업데이트와 메시지 브로커 발행이 동시에 성공하거나 실패해야 하는 요구사항을 해결
+- 메시지를 즉시 브로커로 보내지 않고, DB 트랜잭션과 함께 Outbox 테이블에 저장한 뒤 별도 프로세스가 비동기로 브로커에 발행
+
+### 기존 방식의 문제점
+
+1. DB 커밋 후 메시지 발행
+   - DB 트랜잭션은 성공했지만 메시지 발행이 실패하면 데이터 불일치 발생
+   - 메시지 브로커 장애, 네트워크 단절 시 발생
+   - 예: 주문 데이터는 저장되었지만 결제 서비스에 메시지가 전달되지 않음
+
+2. 메시지 발행 후 DB 커밋
+   - 메시지는 발행되었지만 이후 DB 커밋이 실패하면 롤백 불가
+   - 이미 발행된 메시지는 취소할 수 없음
+   - 예: 결제 서비스는 메시지를 받았지만 주문 데이터는 롤백됨
+
+3. 분산 트랜잭션 (2PC)의 한계
+   - 단일 DB 대비 10배 이상의 성능 저하
+   - 동기 방식으로 인한 낮은 가용성 (참여자 중 하나라도 장애 시 전체 블로킹)
+   - 최신 메시지 브로커(Kafka 등)에서 미지원
+
+### Outbox Pattern 구조
+
+구성 요소
+- Sender: 메시지를 보내는 서비스 (비즈니스 로직 수행)
+- Database: 엔티티와 메시지 Outbox를 함께 저장
+- Message Outbox: 보낼 메시지를 저장하는 테이블 (관계형 DB) 또는 document 속성 (NoSQL)
+- Message Relay: Outbox에 저장된 메시지를 브로커로 전송하는 별도 프로세스
+
+동작 흐름
+1. 비즈니스 로직 수행과 함께 Outbox 테이블에 메시지를 INSERT (같은 트랜잭션)
+2. 트랜잭션 커밋 → 엔티티 변경과 메시지 저장이 원자적으로 보장
+3. Message Relay가 Outbox 테이블에서 미발행 메시지를 읽어 브로커에 발행
+4. 발행 성공 시 Outbox 레코드를 삭제하거나 발행 완료 상태로 업데이트
+
+Outbox 테이블 설계 예시
+- `id`: 메시지 고유 식별자 (UUID)
+- `aggregate_type`: 엔티티 타입 (예: Order, Payment)
+- `aggregate_id`: 엔티티 ID
+- `event_type`: 이벤트 타입 (예: OrderCreated, PaymentCompleted)
+- `payload`: 메시지 본문 (JSON)
+- `created_at`: 생성 시각
+- `published`: 발행 여부 (boolean) 또는 `published_at`
+
+### 구현 방식 1: Polling Publisher (폴링 발행기)
+
+- Message Relay가 주기적으로 Outbox 테이블을 쿼리하여 미발행 메시지를 조회하고 브로커에 발행
+
+동작
+1. 스케줄러가 일정 주기(예: 1초)마다 Outbox 테이블에서 `published = false`인 레코드를 조회
+2. 조회된 메시지를 브로커에 발행
+3. 발행 성공 시 `published = true`로 업데이트 또는 레코드 삭제
+
+장점
+- 구현이 간단하고 직관적
+- 별도 인프라 없이 애플리케이션과 DB만으로 구현 가능
+
+단점
+- 빈번한 DB 폴링으로 인한 부하
+- 폴링 주기에 따라 메시지 발행 지연 발생 (실시간성 저하)
+- 다수의 인스턴스에서 동시 폴링 시 중복 발행 가능 → 분산 락 또는 `SELECT ... FOR UPDATE SKIP LOCKED` 필요
+- NoSQL에서는 쿼리 능력이 제한적일 수 있음
+
+### 구현 방식 2: Transaction Log Tailing (트랜잭션 로그 테일링)
+
+- DB의 트랜잭션 로그(binlog, WAL 등)를 직접 모니터링하여 Outbox 테이블의 변경을 감지하고 브로커에 발행
+
+동작
+1. 비즈니스 로직과 함께 Outbox 테이블에 메시지 INSERT (같은 트랜잭션)
+2. CDC(Change Data Capture) 도구가 DB 트랜잭션 로그를 실시간 모니터링
+3. Outbox 테이블에 새 레코드가 감지되면 해당 메시지를 브로커에 발행
+
+지원 기술
+- MySQL: binlog
+- PostgreSQL: WAL (Write-Ahead Log)
+- 도구: Debezium, LinkedIn Databus, DynamoDB Streams
+
+장점
+- DB 폴링이 없으므로 DB 부하가 낮음
+- 트랜잭션 로그 순서대로 처리하므로 메시지 순서 보장
+- 모든 변경사항을 빠짐없이 추적
+- 실시간에 가까운 메시지 발행
+
+단점
+- CDC 도구(Debezium 등) 운영을 위한 추가 인프라 필요
+- DB 종류별로 설정이 다르며 운영 복잡도 증가
+- 트랜잭션 로그 형식에 대한 이해 필요
+
+### 구현 방식 선택 가이드
+
+| 기준 | Polling Publisher | Transaction Log Tailing |
+|------|-------------------|-------------------------|
+| 구현 난이도 | 낮음 (스케줄러 + SQL) | 높음 (CDC 도구 운영) |
+| 추가 인프라 | 불필요 | 필요 (Debezium, Kafka Connect 등) |
+| DB 부하 | 폴링으로 인한 부하 있음 | 트랜잭션 로그 기반이라 부하 낮음 |
+| 메시지 발행 지연 | 폴링 주기에 비례 (초~분 단위) | 거의 실시간 (밀리초 단위) |
+| 순서 보장 | 추가 처리 필요 (`ORDER BY created_at`) | 트랜잭션 로그 순서로 자동 보장 |
+| 확장성 | 폴링 인스턴스 간 경합 발생 가능 | CDC 도구가 분산 처리 지원 |
+
+선택 기준
+- 초기 단계이거나 인프라 리소스가 제한적인 경우 → Polling Publisher로 시작
+- 메시지 처리량이 많고 실시간성이 중요한 경우 → Transaction Log Tailing
+- 팀의 CDC 도구 운영 역량이 있는 경우 → Transaction Log Tailing
+- Polling으로 시작하여 요구사항이 커지면 Log Tailing으로 전환하는 점진적 접근도 유효
+
+### Debezium + Kafka Connect 활용
+
+- Debezium은 CDC 기반으로 DB 변경사항을 Kafka 토픽으로 발행하는 오픈소스 플랫폼
+- Outbox Pattern과의 조합이 가장 널리 사용되는 구현 방식
+
+구성
+1. Debezium Connector가 DB의 트랜잭션 로그를 모니터링
+2. Outbox 테이블의 INSERT를 감지하여 Kafka 토픽으로 발행
+3. Debezium의 Outbox Event Router(SMT)를 사용하면 Outbox 테이블의 구조에 맞춰 자동으로 라우팅
+   - `aggregate_type`을 기반으로 Kafka 토픽을 자동 결정
+   - `aggregate_id`를 Kafka 메시지 키로 설정하여 파티션 순서 보장
+
+특징
+- At-Least-Once 전달 보장 → Consumer 측 멱등성 구현 필수
+- Debezium 장애 시에도 트랜잭션 로그가 보존되어 재시작 후 이어서 처리
+- Kafka Connect의 분산 모드로 고가용성 확보
+
+### 메시지 순서 보장
+
+- 분산 환경에서 메시지 순서를 보장하는 것은 일관성 유지에 중요한 요소
+
+`aggregate_id` 기반 순서 보장
+- Outbox 테이블의 `aggregate_id`를 Kafka 메시지 키로 사용
+- 동일한 키는 동일한 파티션에 저장되므로, 같은 aggregate에 대한 이벤트 순서가 보장됨
+- 예: 주문 ID가 같은 OrderCreated → OrderPaid → OrderShipped 이벤트는 순서대로 처리
+
+순서 보장의 한계
+- 서로 다른 aggregate 간에는 순서가 보장되지 않음
+  - 예: 주문 A의 OrderCreated와 주문 B의 OrderCreated는 순서 무관
+- 파티션이 다른 메시지 간에는 순서가 보장되지 않음
+- Consumer 그룹 내에서 리밸런싱이 발생하면 일시적으로 순서가 어긋날 수 있음
+
+순서가 중요한 경우의 대응
+- 단일 파티션 사용: 처리량이 제한되지만 전체 순서를 보장
+- Consumer 측에서 순서 검증: 이벤트에 시퀀스 번호를 부여하고, 순서가 맞지 않으면 대기 후 재처리
+- 멱등한 이벤트 설계: 순서에 의존하지 않도록 이벤트 자체에 충분한 상태 정보를 포함
+
+### 멱등성 보장
+
+- Outbox Pattern은 At-Least-Once 전달을 보장하므로 메시지 중복 가능성이 있음
+- Consumer 측에서 멱등성을 반드시 구현해야 함
+
+방법
+- 메시지의 고유 ID(Outbox의 `id` 필드)를 기반으로 처리 여부 확인
+- Redis `SET NX`로 중복 메시지 필터링
+- DB의 유니크 제약 조건으로 중복 삽입 방지
+
+### Inbox Pattern (수신 측 중복 처리 방지)
+
+- Outbox가 발신 측의 메시지 발행을 보장한다면, Inbox는 수신 측의 중복 처리를 방지하는 패턴
+- Consumer가 메시지를 처리할 때 Inbox 테이블에 기록하여 동일 메시지의 재처리를 차단
+
+동작 흐름
+1. Consumer가 메시지를 수신
+2. Inbox 테이블에서 해당 메시지 ID가 존재하는지 확인
+3. 존재하지 않으면 → 비즈니스 로직 수행 + Inbox 테이블에 INSERT (같은 트랜잭션)
+4. 이미 존재하면 → 중복 메시지로 판단하여 무시 (또는 기존 처리 결과 반환)
+
+Inbox 테이블 설계 예시
+- `message_id`: 수신한 메시지의 고유 ID (Outbox의 `id`와 동일)
+- `aggregate_type`: 처리 대상 엔티티 타입
+- `event_type`: 이벤트 타입
+- `processed_at`: 처리 시각
+- `status`: 처리 상태 (PROCESSED, FAILED)
+
+Outbox + Inbox 조합
+- 발신 측: Outbox Pattern으로 메시지 발행의 원자성 보장
+- 수신 측: Inbox Pattern으로 중복 처리 방지
+- 양쪽 모두 DB 트랜잭션으로 보호되므로 End-to-End 신뢰성 확보
+- 이 조합을 통해 At-Least-Once 전달에서 발생하는 중복 문제를 체계적으로 해결
+
+Inbox 테이블 관리
+- Outbox와 마찬가지로 레코드가 지속적으로 쌓임
+- 일정 기간(예: 7일) 이후 처리 완료된 레코드를 정리하는 배치 작업 필요
+- 메시지 재전달 가능 기간보다 긴 보존 기간을 설정해야 중복 방지 효과 유지
+
+### Outbox 테이블 관리
+
+- Outbox 테이블은 지속적으로 레코드가 쌓이므로 관리가 필요
+
+정리 전략
+- 발행 완료된 레코드를 주기적으로 삭제하는 배치 작업
+- 파티셔닝: 날짜 기반으로 테이블을 파티셔닝하여 오래된 파티션을 빠르게 삭제
+- 보존 기간 설정: 감사(audit) 목적으로 일정 기간 보존 후 삭제
+
+### 메시지 스키마 진화 (Schema Evolution)
+
+- 시스템이 발전하면서 Outbox에 저장되는 메시지의 payload 형식이 변경될 수 있음
+- 스키마 변경 시 기존 Consumer가 새로운 형식을 처리하지 못하면 장애 발생
+
+하위 호환성 유지 전략
+- 필드 추가는 자유롭게 가능 (Consumer가 모르는 필드는 무시)
+- 기존 필드 삭제/이름 변경은 하위 호환성을 깨뜨리므로 지양
+- 필드 타입 변경은 호환 가능한 범위 내에서만 허용 (예: int → long)
+
+버전 관리 방법
+- payload에 `schema_version` 필드를 포함하여 Consumer가 버전별로 분기 처리
+- Kafka Schema Registry(Avro, Protobuf)를 활용하여 스키마 호환성을 자동 검증
+  - BACKWARD: 새 스키마로 이전 데이터를 읽을 수 있음
+  - FORWARD: 이전 스키마로 새 데이터를 읽을 수 있음
+  - FULL: 양방향 호환
+
+단계적 마이그레이션
+1. 새 필드를 추가하되 기존 필드를 유지 (양쪽 모두 존재하는 과도기)
+2. 모든 Consumer가 새 필드를 사용하도록 업데이트
+3. 충분한 기간이 지난 후 이전 필드를 제거
+
+### 다른 패턴과의 비교
+
+Outbox Pattern vs Listen to Yourself
+- Listen to Yourself: 서비스가 이벤트를 브로커에 발행한 뒤, 자기 자신이 해당 이벤트를 구독하여 DB에 저장
+  - DB 저장 전에 이벤트가 먼저 발행되므로, Consumer 처리 전까지 DB에 데이터가 없는 구간이 존재
+  - 브로커가 SPOF가 될 수 있음
+- Outbox: DB 트랜잭션으로 먼저 저장하고 비동기로 발행
+  - DB에 데이터가 항상 먼저 존재하므로 조회 시 일관성 유지
+  - DB가 기준(Source of Truth)이 되어 신뢰성이 높음
+
+Outbox Pattern vs Event Sourcing
+- Event Sourcing: 상태 변경 이벤트 자체를 영속화하고, 현재 상태는 이벤트 재생으로 도출
+  - 이벤트 스토어가 곧 데이터베이스이자 메시지 소스
+  - 근본적으로 DB와 메시지의 이중화 문제가 발생하지 않음
+  - 도입 난이도가 높고 기존 시스템과의 통합이 어려움
+- Outbox: 기존 CRUD 기반 시스템에 메시지 발행의 신뢰성만 추가
+  - 기존 아키텍처를 크게 변경하지 않고 적용 가능
+  - Event Sourcing 대비 도입 비용이 낮음
+
+Outbox Pattern vs Saga
+- Saga: 여러 서비스에 걸친 분산 트랜잭션을 로컬 트랜잭션의 연속으로 처리
+- Outbox: 단일 서비스 내에서 DB 저장과 메시지 발행의 원자성을 보장
+- Saga의 각 단계에서 Outbox Pattern을 사용하여 메시지 발행의 신뢰성을 확보하는 조합이 일반적
+
+### Outbox Pattern의 한계와 트레이드오프
+
+- Outbox Pattern은 만능이 아니며 다음과 같은 비용이 발생
+
+쓰기 증가
+- 비즈니스 테이블 외에 Outbox 테이블에도 INSERT가 발생하여 쓰기 부하가 증가
+- 트랜잭션 범위가 넓어지면서 락 유지 시간이 길어질 수 있음
+
+메시지 발행 지연
+- 비동기 발행 방식이므로 트랜잭션 커밋과 실제 메시지 발행 사이에 시간차가 존재
+- Polling 방식은 초~분 단위, Log Tailing 방식은 밀리초 단위 지연
+- 실시간 처리가 절대적으로 중요한 경우에는 적합하지 않을 수 있음
+
+운영 복잡도
+- Outbox 테이블 관리 (정리, 파티셔닝, 모니터링) 부담
+- Log Tailing 방식은 CDC 도구의 운영/모니터링이 추가됨
+- 장애 상황(Relay 다운, 브로커 장애 등)에 대한 복구 절차 필요
+
+Exactly-Once 미보장
+- At-Least-Once만 보장하므로 Consumer 측 멱등성 구현이 필수
+- Inbox Pattern 등 추가적인 중복 방지 메커니즘이 필요하여 전체 시스템 복잡도 증가
+
+적용 판단 기준
+- 메시지 유실이 비즈니스에 치명적인가? (결제, 주문 등) → 적용 권장
+- 메시지 유실이 허용 가능한 수준인가? (로그, 통계 등) → 단순 발행으로 충분
+- 팀이 CDC 도구를 운영할 역량이 있는가? → Log Tailing, 없으면 Polling부터 시작
+
+### 적용 사례
+
+- 금융/결제 시스템: 주문 생성 → 결제 요청 메시지의 원자적 발행
+- 선착순 예매 시스템: 재고 감소 → 예매 확정 메시지의 원자적 발행
+- 이커머스: 주문 상태 변경 → 배송/알림 서비스로의 이벤트 전파
+- 마이크로서비스 간 이벤트 기반 통신에서 데이터 일관성이 중요한 모든 영역
+
+### 참고
+
+- [Transaction Outbox Pattern 알아보기 - eastperson](https://velog.io/@eastperson/Transaction-Outbox-Pattern-%EC%95%8C%EC%95%84%EB%B3%B4%EA%B8%B0)
+- [Microservices Patterns - Chris Richardson](https://microservices.io/patterns/data/transactional-outbox.html)
