@@ -9,7 +9,7 @@
 
 ## 첫번째 해결 방법
 - mongoDB aggregation pipeline 에서 `$sort` stage 를 사용하여 정렬 처리
-```
+```javascript
 db.aggregate([
   {
     $search: {
@@ -21,11 +21,10 @@ db.aggregate([
   },
   {
     $sort: {
-      'likeCount': -1 // 좋아요순 정렬 
+      'likeCount': -1 // 좋아요순 정렬
     }
   }
 ])
-
 ```
 - 해결했다고 생각했지만 쿼리 지연 및 성능 이슈가 발생
 
@@ -37,27 +36,27 @@ db.aggregate([
     - mongot: Apache Lucene 기반의 자바 웹 프로세스, `$search`stage를 처리
     - mongod: MongoDB 시스템의 기본 데몬 프로세스 `$sort`stage를 처리
 - `$search` 와 `$sort` 두 stage를 사용하게 되면
-    1. `mongot`에서 검색어에 해당하는 항복의 id, 메타데이터를 반환
+    1. `mongot`에서 검색어에 해당하는 항목의 id, 메타데이터를 반환
     2. `mongod`에서 받은 id를 기반으로 DB 컬렉션 데이터 조회
     3. `mongod`에서 조회된 데이터를 `$sort` stage 를 통해 정렬
-- 위의 2.3 과정에서 대량의 데이터를 조회 및 정렬하는 과정에서 지연 발생
+- 위의 2, 3 과정에서 대량의 데이터를 조회 및 정렬하는 과정에서 지연 발생
 
 <br><br>
 ## 두번째 해결 방법 (storedSource +  returnStoredSource)
-### storedSource 
-- :옵션에 정의한 필드는 mongot에 프로세스에 저장되어짐.
-- 인덱스 정의에서 생성 가능 
-```
+### storedSource
+- 옵션에 정의한 필드는 mongot 프로세스에 저장됨.
+- 인덱스 정의에서 생성 가능
+```json
 {
- 'stouredSource': ['likeCount']
+  "storedSource": ["likeCount"]
 }
 ```
-### returnStoredSource 
+### returnStoredSource
 - atlas search가 DB에서 전체 문서 조회를 수행해야 하는지 아니면 저장된 필드를 atlas search에서 직접 반환해야 하는지를 지정
   - `true` : atlas search에서 직접 저장된 소스 필드만 반환.
   - `false` : DB에서 암시적 전체 문서 조회(기본값)
 
-```
+```javascript
 db.aggregate([
   {
     $search: {
@@ -70,16 +69,16 @@ db.aggregate([
   },
   {
     $sort: {
-      'likeCount': -1  
+      'likeCount': -1
     }
   }
 ])
 ```
-- monod가 추가적으로 데이터를 조회할 필요없이 `likeCount` 필드를 기반으로 정렬을 수행하기 때문에 성능 이슈가 해결됨.
+- mongod가 추가적으로 데이터를 조회할 필요없이 `likeCount` 필드를 기반으로 정렬을 수행하기 때문에 성능 이슈가 해결됨.
 - 컬렉션 직접 조회 없이 필터,정렬 등에 필요한 모든 필드가 역인덱스에 저장되어있는 방식이기 때문에 커버링 인덱스와 유사하게 동작.
 - 정렬필드 외에 추가적으로 필요한 필드가 있다면, `$lookup` stage를 사용하여 추가적인 필드를 조회할 수 있음.
 
-```
+```javascript
 db.aggregate([
   {
     $search: {
@@ -92,7 +91,7 @@ db.aggregate([
   },
   {
     $sort: {
-      'likeCount': -1  
+      'likeCount': -1
     }
   },
   {
@@ -103,11 +102,12 @@ db.aggregate([
 ])
 ```
 
-## 두번째 문제 해결 방법의 문제점
+## 두번째 해결 방법의 문제점
 - `$lookup`과 같은 추가 stage가 필요하며 기존보다 더 복잡한 쿼리형태를 가짐.
 - 검색 인덱스에 id + 정렬 필드까지 저장해야 하기 때문에 인덱스 사이즈가 커질 수 있음.
 - 최대로 사용할수 있는 정렬 메모리 용량을 벗어나는 경우가 발생
 - 특정 조건만 가중치를 두고 정렬을 수행해야 하는 경우에는 사용하기 어려움.
+- `storedSource`에 저장된 데이터와 실제 컬렉션 데이터 간 동기화 지연이 발생할 수 있음. 문서가 업데이트되더라도 `storedSource`의 데이터는 인덱스 재구축 시점에 반영되므로, 실시간 정합성이 중요한 경우 주의가 필요함.
 
 ## 세번째 해결 방법 (near operator + score function)
 ### near operator
@@ -116,7 +116,7 @@ db.aggregate([
 - 정렬 필드가 number, date, geometry 타입인 경우 사용 가능
 
 ### Syntax
-```
+```javascript
 {
    $search: {
       "index": <index name>, // optional, defaults to "default"
@@ -128,14 +128,20 @@ db.aggregate([
    }
 }
 ```
-- path 
+- path
   - 역인덱싱된 필드
   - string, string[] 타입을 가짐.
 - origin
-  - 기준값
+  - score 계산의 기준이 되는 값
   - number, date 타입
+  - 필드 값이 origin에 가까울수록 높은 score를 부여받음
+  - 정렬 방향에 따라 값을 설정해야 함 (내림차순 정렬 시 필드의 최대값보다 충분히 큰 값으로 설정)
 - pivot
-  - 숫자형 타입
+  - score 감쇠 속도를 결정하는 값 (숫자형 타입)
+  - `pivot` 값이 작을수록 origin에서 조금만 벗어나도 score가 급격히 감소하여, 값의 차이에 민감하게 반응함
+  - `pivot` 값이 클수록 origin에서 멀어져도 score가 완만하게 감소하여, 값의 차이에 둔감하게 반응함
+  - 예시: `pivot: 1`이고 `origin: 100000`일 때, likeCount가 99999(거리=1)이면 score=0.5, likeCount가 99990(거리=10)이면 score≈0.09
+  - 예시: `pivot: 100`이고 `origin: 100000`일 때, likeCount가 99999(거리=1)이면 score≈0.99, likeCount가 99990(거리=10)이면 score≈0.91
 
 ### 계산식
 - score = pivot / (pivot + |origin - path|)
@@ -146,76 +152,95 @@ db.aggregate([
 - distance 가 커질수록 score 가 0에 가까워짐
 
 ### 예시
-```
+```javascript
 db.aggregate([
   {
     $search: {
       compound: {
         filter: [
-          { text: { 
-              query: "searchTerm", 
+          { text: {
+              query: "searchTerm",
               path: ['title', 'content']
              }
            }
         ],
-        should: {
-          near: {
-            path: "likeCount",
-            origin: 100000,
-            pivot: 1
-          } // 좋아요수 값이 100000에 가까울수록 score가 높아짐
-        }
+        should: [
+          {
+            near: {
+              path: "likeCount",
+              origin: 100000,
+              pivot: 1
+            } // 좋아요수 값이 100000에 가까울수록 score가 높아짐
+          }
+        ]
       }
     }
   }
 ])
 ```
 - 이때 `origin` 값은 `path` 에 지정된 필드 값보다 충분히 커야 값의 역전현상이 발생하지 않음.
+  - 예: likeCount의 최대값이 5000이라면, origin을 10000 이상으로 설정해야 likeCount가 높은 문서가 항상 더 높은 score를 받음.
+  - origin보다 큰 값이 존재하면, 실제로 더 큰 값을 가진 문서가 오히려 더 낮은 score를 받는 역전현상 발생.
 
 ### score function
 - `score function` 에서 `path` 에 지정된 필드 값을 기반으로 score 를 계산하여 반환
 - 표현식
 함수 옵션과 함께 다음 표현식을 사용하여 문서의 최종 점수를 변경
   - Arithmetic expressions: 일련의 숫자를 더하거나 곱하는 표현식
-  - Constant expressions: 고정된 상수 값으로 점수를 설정하는 표현식 
-  - Gaussian decay expressions: 지정된 비율로 곱하여 점수를 감쇠시키거나 감소시키는 표현식 
-  - Path expressions: 인덱싱된 숫자 필드 값을 함수 점수에 통합하는 표현식 
-  - Score expressions: Atlas Search에서 할당된 관련성 점수를 반환 
-  - Unary expressions: 지정된 숫자의 log10(x) 또는 log10(x+1)을 계산되어지는 표현식
+  - Constant expressions: 고정된 상수 값으로 점수를 설정하는 표현식
+  - Gaussian decay expressions: 지정된 비율로 곱하여 점수를 감쇠시키거나 감소시키는 표현식
+  - Path expressions: 인덱싱된 숫자 필드 값을 함수 점수에 통합하는 표현식
+  - Score expressions: Atlas Search에서 할당된 관련성 점수를 반환
+  - Unary expressions: 지정된 숫자의 log10(x) 또는 log10(x+1)을 계산하는 표현식
   - [공식문서](https://www.mongodb.com/docs/atlas/atlas-search/score/modify-score/#function) 참고
 - 함수 표현식의 계산을 통해 정렬 후 2차 정렬을 `$near operator` 를 통해 수행할 수 있음.
 
 ### 예시
-```
+```javascript
 db.aggregate([
   {
     $search: {
       compound: {
         filter: [
-          { text: { 
-              query: "searchTerm", 
+          { text: {
+              query: "searchTerm",
               path: ['title', 'content']
              }
            }
         ],
-        should: {
-          near: {
-            path: "_id",
-            origin: 100000,
-            pivot: 100000,
-            score: {
-              function: {
-                add: [ // 아래 두 점수를 더해 최종 점수로 계산
-                  { path: "likeCount" },  // path 로 계산한 score
-                  { score: "relevance" }  // $near 로 계산한 score
-                ]
+        should: [
+          {
+            near: {
+              path: "_id",
+              origin: 100000,
+              pivot: 100000,
+              score: {
+                function: {
+                  add: [ // 아래 두 점수를 더해 최종 점수로 계산
+                    { path: "likeCount" },  // path 로 계산한 score
+                    { score: "relevance" }  // $near 로 계산한 score
+                  ]
+                }
               }
             }
-          } 
-        }
+          }
+        ]
       }
     }
   }
 ])
 ```
 
+## 세번째 해결 방법의 한계
+- score 기반 정렬이므로 동일한 score를 가진 문서 간의 정렬 순서가 보장되지 않음.
+- `origin`과 `pivot` 값을 데이터 분포에 맞게 적절히 설정해야 하며, 데이터 특성이 변하면 값 재조정이 필요할 수 있음.
+- score 계산이 부동소수점 연산 기반이므로, 값이 매우 가까운 문서 간에는 정밀도 한계로 정렬이 부정확할 수 있음.
+
+<br><br>
+## 결론
+
+| 방법 | 장점 | 단점 | 적합한 상황 |
+|------|------|------|------------|
+| `$sort` stage | 구현이 단순함 | mongod에서 전체 데이터 조회 후 정렬하므로 성능 이슈 발생 | 데이터가 적은 경우 |
+| `storedSource` + `returnStoredSource` | mongod의 추가 조회 없이 정렬 가능 | 인덱스 사이즈 증가, 데이터 동기화 지연, 쿼리 복잡도 증가 | 정렬 필드가 고정적이고 실시간 정합성이 덜 중요한 경우 |
+| `near` + `score function` | 별도 정렬 stage 없이 mongot 내에서 처리, 가중치 기반 복합 정렬 가능 | origin/pivot 값 설정 필요, 부동소수점 정밀도 한계 | 가중치 기반 정렬이 필요하거나 대규모 데이터 환경 |
