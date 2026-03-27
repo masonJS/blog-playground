@@ -208,7 +208,7 @@ const handler = new LoggingDecorator(
 - 각 Decorator는 독립적으로 추가/제거 가능
 - NestJS의 `Interceptor`, `Guard`, `Pipe`가 내부적으로 이와 유사한 체이닝 구조
 
-## 참고: TypeScript의 @ Decorator와의 관계
+## 참고: TypeScript의 @Decorator와의 관계
 ```typescript
 // TypeScript의 @ 데코레이터 (Stage 3 문법)
 @Controller('users')
