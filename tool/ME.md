@@ -9,3 +9,4 @@
 7. [Raindrop.io](https://raindrop.io/) - 웹에서 발견한 콘텐츠를 저장, 정리, 재발견할 수 있는 올인원 북마크 매니저이다.
 8. [Excalidraw](https://excalidraw.com/) - 손으로 그린 듯한 스타일의 다이어그램과 스케치를 만들 수 있는 오픈소스 화이트보드 도구이다.
 9. [lazygit](https://github.com/jesseduffield/lazygit) - Git 명령어를 직관적인 터미널 UI로 쉽게 사용할 수 있게 해주는 도구이다.
+10. [Trancy](https://www.trancy.org/) - YouTube, Netflix 등 영상에 이중 자막을 제공하고, AI 기반 발음 평가·문법 분석·단어장·딕테이션 등 다양한 언어 학습 기능을 지원하는 브라우저 확장 프로그램이다.
